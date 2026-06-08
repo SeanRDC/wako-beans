@@ -1,0 +1,15 @@
+node_modules
+.next
+out
+next-env.d.ts
+*.tsbuildinfo
+.env*
+.vercel
+.DS_Store
+
+# working files
+.taste-skill
+.claude
+CLAUDE.md
+assets/3d/out
+assets/3d/**/__pycache__

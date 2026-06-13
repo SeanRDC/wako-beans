@@ -1,0 +1,94 @@
+/* Buttons and text links. */
+
+.button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 0 28px;
+  background: var(--button);
+  color: var(--button-ink);
+  font-weight: 500;
+  font-size: var(--step-body);
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  isolation: isolate;
+  transition: transform var(--t-press) var(--ease-out), color var(--t-hover) ease;
+}
+
+/* the hover: the button's own ink rises from below and the label flips colour */
+.button::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--button-ink);
+  transform: translateY(101%);
+  transition: transform 420ms var(--ease-out);
+}
+
+.button:active {
+  transform: scale(0.97);
+}
+
+.button[disabled] {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.button--wide {
+  width: 100%;
+}
+
+.button--quiet {
+  background: transparent;
+  color: var(--ink);
+  box-shadow: inset 0 0 0 2px var(--ink);
+}
+
+.button--quiet::before {
+  background: var(--ink);
+}
+
+@media (hover: hover) {
+  .button:not([disabled]):hover {
+    color: var(--button);
+  }
+
+  .button:not([disabled]):hover::before {
+    transform: none;
+  }
+
+  .button--quiet:not([disabled]):hover {
+    color: var(--ground);
+  }
+}
+
+/* a text link with a bar that grows from the left */
+.link {
+  position: relative;
+  display: inline-block;
+  font-weight: 500;
+  padding-block: 4px;
+}
+
+.link::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: currentColor;
+  transform-origin: 0 50%;
+  transition: transform 360ms var(--ease-out);
+}
+
+@media (hover: hover) {
+  .link:hover::after {
+    transform: scaleX(0.35);
+  }
+}

@@ -13,8 +13,10 @@ import numpy as np
 
 W, D, H = 0.130, 0.074, 0.250  # width, depth, height to the top of the seal
 SEAL = 0.018                   # height of the crimped band
+ROUND = 0.006                  # radius of the bottom edge
 NF, NG = 80, 46                # points across a face, across a gusset
 RINGS = 250
+PERIM = 2 * (W + D)
 
 
 def srgb_to_linear(c):
@@ -31,7 +33,7 @@ def smoothstep(e0, e1, x):
     return t * t * (3.0 - 2.0 * t)
 
 
-def _ring(z):
+def _ring(z, inset):
     """One cross-section at height z: (points, 2) going front, right gusset, back, left gusset."""
     body = H - SEAL
     zz = min(z / body, 1.0)
@@ -57,15 +59,39 @@ def _ring(z):
         t = k / NG
         v = 1 - abs(2 * t - 1)
         pts.append((-a + fold * v - side * math.sin(math.pi * t), b - 2 * b * t))
-    return np.array(pts)
+    ring = np.array(pts)
+
+    # round the corners: more near the base, almost none at the creased top
+    radius = 0.0105 * (1 - float(smoothstep(0.0, 0.5 * H, z))) + 0.0016
+    sigma = radius * 0.55 / (PERIM / len(pts))
+    if sigma > 0.35:
+        half = int(math.ceil(sigma * 3))
+        kernel = np.exp(-0.5 * (np.arange(-half, half + 1) / sigma) ** 2)
+        kernel /= kernel.sum()
+        padded = np.concatenate([ring[-half:], ring, ring[:half]])
+        ring = np.stack([np.convolve(padded[:, i], kernel, mode="valid") for i in range(2)], axis=1)
+
+    if inset > 0:  # the rounded bottom edge
+        ring[:, 0] *= (a - inset) / a
+        ring[:, 1] *= (b - inset) / b
+    return ring
 
 
 def bag_points(seed):
     """All the bag's points, (rings, columns, 3)."""
-    zs = [H * i / RINGS for i in range(RINGS + 1)]
+    steps = 7
+    zs, insets = [], []
+    for i in range(steps):
+        ang = (math.pi / 2) * i / steps
+        zs.append(ROUND * (1 - math.cos(ang)))
+        insets.append(ROUND * (1 - math.sin(ang)))
+    for i in range(RINGS + 1):
+        zs.append(ROUND + (H - ROUND) * i / RINGS)
+        insets.append(0.0)
+
     P = np.zeros((len(zs), 2 * (NF + NG), 3))
-    for i, z in enumerate(zs):
-        P[i, :, :2] = _ring(z)
+    for i, (z, inset) in enumerate(zip(zs, insets)):
+        P[i, :, :2] = _ring(z, inset)
         P[i, :, 2] = z
     return P
 

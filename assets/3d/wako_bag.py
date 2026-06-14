@@ -1,8 +1,8 @@
 """The Wako Beans bag: a 250 g flat-bottom pouch, built from numbers.
 
 The bag is a loft of cross-sections. Low down it is a box full of beans; higher
-up the front and back close on each other until everything meets in the heat
-seal.
+up the front and back close on each other while the side gussets fold inward,
+keeping each panel's paper length, until everything meets in the heat seal.
 
 Sizes are metres. The front faces -Y.
 """
@@ -39,6 +39,8 @@ def _ring(z):
     belly = math.sin(math.pi * zz) ** 0.8
     b = (D / 2) * (1 + 0.05 * belly) * (1 - close) + 0.0013 * close
     a = W / 2 + 0.0012 * belly
+    fold = math.sqrt(max((D / 2) ** 2 - min(b, D / 2) ** 2, 0.0))   # how far the gusset crease has gone in
+    side = 0.0028 * belly * (1 - close)
 
     pts = []
     for k in range(NF):                      # front, left to right
@@ -46,13 +48,15 @@ def _ring(z):
         pts.append((x, -b))
     for k in range(NG):                      # right gusset, front to back
         t = k / NG
-        pts.append((a, -b + 2 * b * t))
+        v = 1 - abs(2 * t - 1)
+        pts.append((a - fold * v + side * math.sin(math.pi * t), -b + 2 * b * t))
     for k in range(NF):                      # back, right to left
         x = a - 2 * a * k / NF
         pts.append((x, b))
     for k in range(NG):                      # left gusset, back to front
         t = k / NG
-        pts.append((-a, b - 2 * b * t))
+        v = 1 - abs(2 * t - 1)
+        pts.append((-a + fold * v - side * math.sin(math.pi * t), b - 2 * b * t))
     return np.array(pts)
 
 

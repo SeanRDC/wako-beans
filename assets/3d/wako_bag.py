@@ -13,6 +13,7 @@ import numpy as np
 
 W, D, H = 0.130, 0.074, 0.250  # width, depth, height to the top of the seal
 SEAL = 0.018                   # height of the crimped band
+ZIP = H - SEAL - 0.022         # height of the zipper ridge
 ROUND = 0.006                  # radius of the bottom edge
 NF, NG = 80, 46                # points across a face, across a gusset
 RINGS = 250
@@ -42,19 +43,21 @@ def _ring(z, inset):
     b = (D / 2) * (1 + 0.05 * belly) * (1 - close) + 0.0013 * close
     a = W / 2 + 0.0012 * belly
     fold = math.sqrt(max((D / 2) ** 2 - min(b, D / 2) ** 2, 0.0))   # how far the gusset crease has gone in
+    pillow = 0.0058 * belly * (1 - 0.35 * close)
     side = 0.0028 * belly * (1 - close)
+    ridge = 0.0011 * math.exp(-((z - ZIP) / 0.0019) ** 2)
 
     pts = []
     for k in range(NF):                      # front, left to right
         x = -a + 2 * a * k / NF
-        pts.append((x, -b))
+        pts.append((x, -b - (pillow + ridge) * (1 - (x / a) ** 2) ** 0.7 - ridge * 0.4))
     for k in range(NG):                      # right gusset, front to back
         t = k / NG
         v = 1 - abs(2 * t - 1)
         pts.append((a - fold * v + side * math.sin(math.pi * t), -b + 2 * b * t))
     for k in range(NF):                      # back, right to left
         x = a - 2 * a * k / NF
-        pts.append((x, b))
+        pts.append((x, b + (pillow + ridge) * (1 - (x / a) ** 2) ** 0.7 + ridge * 0.4))
     for k in range(NG):                      # left gusset, back to front
         t = k / NG
         v = 1 - abs(2 * t - 1)

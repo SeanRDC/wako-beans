@@ -17,7 +17,7 @@ import os
 
 import bpy
 import numpy as np
-from mathutils import Vector, noise
+from mathutils import Matrix, Vector, noise
 
 W, D, H = 0.130, 0.074, 0.250  # width, depth, height to the top of the seal
 SEAL = 0.018                   # height of the crimped band
@@ -236,6 +236,56 @@ def paper_material(name, colour_path, mask_path):
     return mat
 
 
+def plastic_material(name, hex_colour, shade=0.8):
+    mat = bpy.data.materials.new(name)
+    mat.use_nodes = True
+    bsdf = mat.node_tree.nodes.get("Principled BSDF")
+    r, g, b = hex_linear(hex_colour)
+    bsdf.inputs["Base Color"].default_value = (r * shade, g * shade, b * shade, 1.0)
+    bsdf.inputs["Roughness"].default_value = 0.34
+    return mat
+
+
+def build_valve(parent, P, colour):
+    """The one-way valve on the back: a low disc with a raised cap and five vents."""
+    rows, cols = P.shape[:2]
+    j = NF + NG + NF // 2                         # middle of the back
+    i = int(np.argmin(np.abs(P[:, j, 2] - 0.192)))
+    centre = Vector(P[i, j])
+    up = Vector(P[i + 6, j] - P[i - 6, j]).normalized()
+    across = Vector(P[i, j + 6] - P[i, j - 6]).normalized()
+    normal = across.cross(up).normalized()
+    if normal.y < 0:
+        normal = -normal
+    up = normal.cross(across).normalized()
+    frame = Matrix((across, up, normal)).transposed().to_4x4()
+    frame.translation = centre
+
+    mat = plastic_material("Valve", colour)
+    dark = plastic_material("Valve vents", "#0c0b0b", 1.0)
+    parts = []
+
+    def disc(radius, depth, lift, material, bevel=0.0003, offset=(0.0, 0.0)):
+        bpy.ops.mesh.primitive_cylinder_add(vertices=64, radius=radius, depth=depth)
+        obj = bpy.context.active_object
+        obj.matrix_world = frame @ Matrix.Translation((offset[0], offset[1], lift + depth / 2))
+        obj.data.materials.append(material)
+        if bevel:
+            mod = obj.modifiers.new("Bevel", "BEVEL")
+            mod.width = bevel
+            mod.segments = 3
+        bpy.ops.object.shade_smooth()
+        obj.parent = parent
+        parts.append(obj)
+
+    disc(0.0098, 0.0011, -0.0004, mat)
+    disc(0.0062, 0.0009, 0.0006, mat)
+    for k in range(5):
+        ang = 2 * math.pi * k / 5
+        disc(0.0007, 0.0004, 0.0012, dark, bevel=0.0, offset=(0.0034 * math.cos(ang), 0.0034 * math.sin(ang)))
+    return parts
+
+
 def build_bag(slug, colours, labels_dir, seed):
     """Make one bag standing on z = 0. Returns the empty that carries it."""
     P = bag_points(seed)
@@ -281,4 +331,5 @@ def build_bag(slug, colours, labels_dir, seed):
     carrier = bpy.data.objects.new(f"Carrier {slug}", None)
     bpy.context.collection.objects.link(carrier)
     obj.parent = carrier
+    build_valve(carrier, P, colours["bag"])
     return carrier

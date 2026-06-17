@@ -1,5 +1,7 @@
 """The Wako Beans bag: a 250 g flat-bottom pouch, built from numbers.
 
+    blender -b --factory-startup -P assets/3d/render.py -- --job hero
+
 The bag is a loft of cross-sections. Low down it is a box full of beans; higher
 up the front and back close on each other while the side gussets fold inward,
 keeping each panel's paper length, until everything meets in the heat seal.
@@ -7,9 +9,11 @@ Wrinkles, the zipper ridge and a slight lean are added to the points before the
 mesh is made, from a seed, so each coffee has its own bag and every build of it
 is the same.
 
-Sizes are metres. The front faces -Y.
+Sizes are metres. The front faces -Y. The printed wrap (assets/3d/labels) maps
+round the bag: front, right gusset, back, left gusset.
 """
 import math
+import os
 
 import bpy
 import numpy as np
@@ -84,6 +88,13 @@ def _ring(z, inset):
     return ring
 
 
+def _columns_u():
+    """Texture u of each column, from the paper's own widths."""
+    widths = [W / NF] * NF + [D / NG] * NG + [W / NF] * NF + [D / NG] * NG
+    s = np.concatenate([[0.0], np.cumsum(widths)])
+    return s / PERIM
+
+
 def bag_points(seed):
     """All the bag's points, (rings, columns, 3), wrinkled and leaning."""
     steps = 7
@@ -150,13 +161,78 @@ def bag_points(seed):
     return P
 
 
-def grey_material(name):
-    """A plain grey stand-in while the shape is worked out."""
+def paper_material(name, colour_path, mask_path):
+    """Matte coated paper. The print is a touch smoother than the bare stock,
+    the stock has a fine tooth, and the seal is crimped."""
     mat = bpy.data.materials.new(name)
     mat.use_nodes = True
-    bsdf = mat.node_tree.nodes.get("Principled BSDF")
-    bsdf.inputs["Base Color"].default_value = (0.5, 0.5, 0.5, 1.0)
-    bsdf.inputs["Roughness"].default_value = 0.6
+    nodes, links = mat.node_tree.nodes, mat.node_tree.links
+    bsdf = nodes.get("Principled BSDF")
+
+    colour = nodes.new("ShaderNodeTexImage")
+    colour.image = bpy.data.images.load(colour_path, check_existing=True)
+    colour.extension = "EXTEND"
+    links.new(colour.outputs["Color"], bsdf.inputs["Base Color"])
+
+    mask = nodes.new("ShaderNodeTexImage")
+    mask.image = bpy.data.images.load(mask_path, check_existing=True)
+    mask.image.colorspace_settings.name = "Non-Color"
+    mask.extension = "EXTEND"
+    rough = nodes.new("ShaderNodeMapRange")
+    rough.inputs["To Min"].default_value = 0.62   # bare stock
+    rough.inputs["To Max"].default_value = 0.46   # ink
+    links.new(mask.outputs["Color"], rough.inputs["Value"])
+    links.new(rough.outputs["Result"], bsdf.inputs["Roughness"])
+    bsdf.inputs["Sheen Weight"].default_value = 0.25
+    bsdf.inputs["Sheen Roughness"].default_value = 0.45
+    bsdf.inputs["Specular IOR Level"].default_value = 0.42
+
+    coords = nodes.new("ShaderNodeTexCoord")
+
+    tooth = nodes.new("ShaderNodeTexNoise")
+    tooth.inputs["Scale"].default_value = 2600.0
+    tooth.inputs["Detail"].default_value = 2.0
+    links.new(coords.outputs["Object"], tooth.inputs["Vector"])
+    bump1 = nodes.new("ShaderNodeBump")
+    bump1.inputs["Strength"].default_value = 0.10
+    bump1.inputs["Distance"].default_value = 0.0002
+    links.new(tooth.outputs["Fac"], bump1.inputs["Height"])
+
+    crinkle = nodes.new("ShaderNodeTexNoise")
+    crinkle.inputs["Scale"].default_value = 85.0
+    crinkle.inputs["Detail"].default_value = 6.0
+    crinkle.inputs["Distortion"].default_value = 1.6
+    links.new(coords.outputs["Object"], crinkle.inputs["Vector"])
+    bump2 = nodes.new("ShaderNodeBump")
+    bump2.inputs["Strength"].default_value = 0.22
+    bump2.inputs["Distance"].default_value = 0.0012
+    links.new(crinkle.outputs["Fac"], bump2.inputs["Height"])
+    links.new(bump1.outputs["Normal"], bump2.inputs["Normal"])
+
+    # crimp: fine ridges across the seal band only
+    sep = nodes.new("ShaderNodeSeparateXYZ")
+    links.new(coords.outputs["UV"], sep.inputs["Vector"])
+    wave = nodes.new("ShaderNodeMath")
+    wave.operation = "MULTIPLY"
+    wave.inputs[1].default_value = 2 * math.pi * (H / 0.0016)
+    links.new(sep.outputs["Y"], wave.inputs[0])
+    sine = nodes.new("ShaderNodeMath")
+    sine.operation = "SINE"
+    links.new(wave.outputs["Value"], sine.inputs[0])
+    band = nodes.new("ShaderNodeMath")
+    band.operation = "GREATER_THAN"
+    band.inputs[1].default_value = (H - SEAL + 0.001) / H
+    links.new(sep.outputs["Y"], band.inputs[0])
+    crimp = nodes.new("ShaderNodeMath")
+    crimp.operation = "MULTIPLY"
+    links.new(sine.outputs["Value"], crimp.inputs[0])
+    links.new(band.outputs["Value"], crimp.inputs[1])
+    bump3 = nodes.new("ShaderNodeBump")
+    bump3.inputs["Strength"].default_value = 0.55
+    bump3.inputs["Distance"].default_value = 0.0004
+    links.new(crimp.outputs["Value"], bump3.inputs["Height"])
+    links.new(bump2.outputs["Normal"], bump3.inputs["Normal"])
+    links.new(bump3.outputs["Normal"], bsdf.inputs["Normal"])
     return mat
 
 
@@ -164,26 +240,43 @@ def build_bag(slug, colours, labels_dir, seed):
     """Make one bag standing on z = 0. Returns the empty that carries it."""
     P = bag_points(seed)
     rows, cols = P.shape[:2]
+    U = _columns_u()
+    V = P[:, 0, 2].copy()
+    V = np.array([min(max(v, 0.0), H) for v in V])
+    # v follows the paper, not the leaning height: use each ring's own index height
+    ring_z = [ROUND * (1 - math.cos((math.pi / 2) * i / 7)) for i in range(7)]
+    ring_z += [ROUND + (H - ROUND) * i / RINGS for i in range(RINGS + 1)]
+    V = np.array(ring_z) / H
 
     verts = P.reshape(-1, 3).tolist()
-    faces = []
+    faces, uvs = [], []
     for i in range(rows - 1):
         for j in range(cols):
             j2 = (j + 1) % cols
             faces.append((i * cols + j, i * cols + j2, (i + 1) * cols + j2, (i + 1) * cols + j))
+            uvs.extend([(U[j], V[i]), (U[j + 1], V[i]), (U[j + 1], V[i + 1]), (U[j], V[i + 1])])
     bottom = tuple(range(cols - 1, -1, -1))
     top = tuple((rows - 1) * cols + j for j in range(cols))
     faces.append(bottom)
+    uvs.extend([(0.5, 0.0)] * cols)
     faces.append(top)
+    uvs.extend([(0.5, 1.0)] * cols)
 
     mesh = bpy.data.meshes.new(f"Bag {slug}")
     mesh.from_pydata(verts, [], faces)
+    layer = mesh.uv_layers.new(name="UVMap")
+    flat = np.array(uvs, dtype=np.float32).reshape(-1)
+    layer.data.foreach_set("uv", flat)
     mesh.polygons.foreach_set("use_smooth", [True] * len(mesh.polygons))
     mesh.update()
 
     obj = bpy.data.objects.new(f"Bag {slug}", mesh)
     bpy.context.collection.objects.link(obj)
-    mesh.materials.append(grey_material(f"Paper {slug}"))
+    mesh.materials.append(paper_material(
+        f"Paper {slug}",
+        os.path.join(labels_dir, f"{slug}.png"),
+        os.path.join(labels_dir, f"{slug}-mask.png"),
+    ))
 
     carrier = bpy.data.objects.new(f"Carrier {slug}", None)
     bpy.context.collection.objects.link(carrier)

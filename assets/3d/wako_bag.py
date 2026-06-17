@@ -3,8 +3,9 @@
 The bag is a loft of cross-sections. Low down it is a box full of beans; higher
 up the front and back close on each other while the side gussets fold inward,
 keeping each panel's paper length, until everything meets in the heat seal.
-Wrinkles are added to the points before the mesh is made, from a seed, so each
-coffee has its own bag and every build of it is the same.
+Wrinkles, the zipper ridge and a slight lean are added to the points before the
+mesh is made, from a seed, so each coffee has its own bag and every build of it
+is the same.
 
 Sizes are metres. The front faces -Y.
 """
@@ -84,7 +85,7 @@ def _ring(z, inset):
 
 
 def bag_points(seed):
-    """All the bag's points, (rings, columns, 3), wrinkled."""
+    """All the bag's points, (rings, columns, 3), wrinkled and leaning."""
     steps = 7
     zs, insets = [], []
     for i in range(steps):
@@ -134,6 +135,18 @@ def bag_points(seed):
                 d *= tuck
             disp[i, j] = max(d, -0.45 * abs(y))
     P += N * disp[:, :, None]
+
+    # the seal is never dead straight, and the bag leans a little
+    lean_y, lean_x, twist = rng.uniform(-1, 1, 3)
+    t = (P[:, :, 2] / H)
+    top = smoothstep(0.55, 1.0, t)
+    P[:, :, 1] += 0.0016 * top * np.sin(P[:, :, 0] * 38.0 + off.x)
+    P[:, :, 1] += 0.0070 * lean_y * t ** 2.2
+    P[:, :, 0] += 0.0035 * lean_x * t ** 2.2
+    ang = 0.035 * twist * t ** 2
+    x, y = P[:, :, 0].copy(), P[:, :, 1].copy()
+    P[:, :, 0] = x * np.cos(ang) - y * np.sin(ang)
+    P[:, :, 1] = x * np.sin(ang) + y * np.cos(ang)
     return P
 
 

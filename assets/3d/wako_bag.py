@@ -118,6 +118,7 @@ def bag_points(seed):
         loose *= float(smoothstep(0.0, 0.035, z))                              # and the base stands firm
         if loose < 1e-4:
             continue
+        tuck = (1 - float(smoothstep(0.40 * H, 0.80 * H, z))) ** 2   # a folded-in gusset is held flat
         for j in range(cols):
             x, y, _ = P[i, j]
             p = Vector((x, y, z))
@@ -126,7 +127,12 @@ def bag_points(seed):
             crease = (1.0 - abs(noise.noise(q))) ** 5
             q2 = Vector((x * 22.0 + 0.4 * z * 60.0, y * 22.0, z * 46.0)) - off
             fold = (1.0 - abs(noise.noise(q2))) ** 6
-            disp[i, j] = loose * (0.0020 * dents - 0.0018 * crease - 0.0010 * fold)
+            d = loose * (0.0020 * dents - 0.0018 * crease - 0.0010 * fold)
+            # near the seal the panels lie almost on each other: never push one through the next
+            on_gusset = NF <= j < NF + NG or j >= 2 * NF + NG
+            if on_gusset:
+                d *= tuck
+            disp[i, j] = max(d, -0.45 * abs(y))
     P += N * disp[:, :, None]
     return P
 

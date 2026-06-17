@@ -3,6 +3,8 @@
 The bag is a loft of cross-sections. Low down it is a box full of beans; higher
 up the front and back close on each other while the side gussets fold inward,
 keeping each panel's paper length, until everything meets in the heat seal.
+Wrinkles are added to the points before the mesh is made, from a seed, so each
+coffee has its own bag and every build of it is the same.
 
 Sizes are metres. The front faces -Y.
 """
@@ -10,6 +12,7 @@ import math
 
 import bpy
 import numpy as np
+from mathutils import Vector, noise
 
 W, D, H = 0.130, 0.074, 0.250  # width, depth, height to the top of the seal
 SEAL = 0.018                   # height of the crimped band
@@ -81,7 +84,7 @@ def _ring(z, inset):
 
 
 def bag_points(seed):
-    """All the bag's points, (rings, columns, 3)."""
+    """All the bag's points, (rings, columns, 3), wrinkled."""
     steps = 7
     zs, insets = [], []
     for i in range(steps):
@@ -96,6 +99,35 @@ def bag_points(seed):
     for i, (z, inset) in enumerate(zip(zs, insets)):
         P[i, :, :2] = _ring(z, inset)
         P[i, :, 2] = z
+
+    rng = np.random.default_rng(seed)
+    off = Vector(rng.uniform(-50, 50, 3))
+
+    # outward normals from the grid itself
+    dj = np.roll(P, -1, axis=1) - np.roll(P, 1, axis=1)
+    di = np.gradient(P, axis=0)
+    N = np.cross(dj, di)
+    N /= np.linalg.norm(N, axis=2, keepdims=True) + 1e-12
+
+    rows, cols = P.shape[:2]
+    disp = np.zeros((rows, cols))
+    for i in range(rows):
+        z = zs[i]
+        loose = 0.42 + 0.58 * float(smoothstep(0.30 * H, 0.72 * H, z))       # the empty top wrinkles most
+        loose *= 1 - float(smoothstep(H - SEAL - 0.010, H - SEAL + 0.002, z))  # the seal is pressed flat
+        loose *= float(smoothstep(0.0, 0.035, z))                              # and the base stands firm
+        if loose < 1e-4:
+            continue
+        for j in range(cols):
+            x, y, _ = P[i, j]
+            p = Vector((x, y, z))
+            dents = noise.fractal(p * 16.0 + off, 1.0, 2.0, 3)
+            q = Vector((x * 30.0, y * 30.0, (z - 0.55 * abs(x)) * 15.0)) + off * 1.7   # creases run down and outward
+            crease = (1.0 - abs(noise.noise(q))) ** 5
+            q2 = Vector((x * 22.0 + 0.4 * z * 60.0, y * 22.0, z * 46.0)) - off
+            fold = (1.0 - abs(noise.noise(q2))) ** 6
+            disp[i, j] = loose * (0.0020 * dents - 0.0018 * crease - 0.0010 * fold)
+    P += N * disp[:, :, None]
     return P
 
 

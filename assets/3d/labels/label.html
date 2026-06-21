@@ -1,0 +1,78 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;800&family=Onest:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  /* The bag's printed wrap, 8 px per mm: front 130, gusset 74, back 130, gusset 74 = 408 mm round, 250 mm tall. */
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 3264px; height: 2000px; overflow: hidden; }
+  body { background: var(--bag); color: var(--print); font-family: "Onest", sans-serif; position: relative; }
+  .d { font-family: "Unbounded", sans-serif; font-weight: 800; text-transform: uppercase; letter-spacing: -0.03em; line-height: 1; }
+  .panel { position: absolute; top: 0; height: 2000px; }
+  .front { left: 0; width: 1040px; }
+
+  /* front */
+  .mark { position: absolute; left: 84px; top: 250px; font-size: 46px; }
+  .species { position: absolute; left: 84px; top: 310px; font-size: 30px; font-weight: 500; }
+  .name { position: absolute; left: 84px; bottom: 380px; transform-origin: 0 100%; transform: rotate(-90deg) translate(0, 100%); white-space: nowrap; }
+  .meter { position: absolute; right: 84px; top: 470px; bottom: 380px; width: 300px; }
+  .meter .fill { position: absolute; left: 0; right: 0; bottom: 0; background: var(--print); }
+  .meter .alt { position: absolute; left: 0; right: 0; text-align: right; font-size: 92px; }
+  .meter .unit { position: absolute; left: 0; right: 0; text-align: right; font-size: 27px; font-weight: 500; white-space: nowrap; }
+  .meter .tick { position: absolute; right: 0; width: 34px; height: 6px; background: var(--print); }
+  .foot { position: absolute; left: 84px; right: 84px; bottom: 150px; display: flex; justify-content: space-between; align-items: flex-end; font-size: 31px; font-weight: 500; line-height: 1.3; }
+  .foot b { font-weight: 700; }
+  .foot .w { font-family: "Unbounded"; font-weight: 800; font-size: 54px; letter-spacing: -0.03em; }
+
+  /* mask pass: everything printed is white, the bare bag is black */
+  body.mask { --bag: #000 !important; --print: #fff !important; }
+</style>
+</head>
+<body>
+  <section class="panel front">
+    <div class="mark d">Wako Beans</div>
+    <div class="species" id="species"></div>
+    <div class="name d" id="name"></div>
+    <div class="meter" id="meter"></div>
+    <div class="foot">
+      <div id="notes"></div>
+      <div style="text-align:right"><div id="roast"></div><div class="w">250 g</div></div>
+    </div>
+  </section>
+<script>
+  const q = new URLSearchParams(location.search);
+  const c = JSON.parse(decodeURIComponent(q.get("c")));
+  const root = document.documentElement;
+  root.style.setProperty("--bag", c.colors.bag);
+  root.style.setProperty("--print", c.colors.print);
+  if (q.get("mask")) document.body.classList.add("mask");
+  const $ = (id) => document.getElementById(id);
+  $("species").textContent = c.species + " · " + c.process + " · " + c.roast + " roast";
+  $("name").textContent = c.name;
+  $("notes").innerHTML = "<b>Tastes of</b><br>" + c.notes.join("<br>");
+  $("roast").textContent = c.place;
+
+  // the altitude column: a bar on a 0 to 2,000 m scale, so five bags in a row step down like a chart
+  const meter = $("meter");
+  const frac = c.altitude / 2000;
+  meter.innerHTML = `<div class="fill" style="height:${frac * 100}%"></div>
+    <div class="alt d" style="bottom:calc(${frac * 100}% + 58px)">${c.altitude.toLocaleString("en-US")}</div>
+    <div class="unit" style="bottom:calc(${frac * 100}% + 16px)">metres above sea level</div>`;
+
+  // fit the vertical name to the label's height
+  document.fonts.ready.then(() => {
+    const el = $("name");
+    const room = 1150; // px of run available bottom to top
+    let size = 520;
+    el.style.fontSize = size + "px";
+    const w = el.getBoundingClientRect().height; // rotated: its run is its on-screen height
+    size = Math.min(520, Math.floor(size * room / w));
+    el.style.fontSize = size + "px";
+    document.body.dataset.ready = "1";
+  });
+</script>
+</body>
+</html>

@@ -13,6 +13,9 @@
   .d { font-family: "Unbounded", sans-serif; font-weight: 800; text-transform: uppercase; letter-spacing: -0.03em; line-height: 1; }
   .panel { position: absolute; top: 0; height: 2000px; }
   .front { left: 0; width: 1040px; }
+  .gr { left: 1040px; width: 592px; }
+  .back { left: 1632px; width: 1040px; }
+  .gl { left: 2672px; width: 592px; }
 
   /* front */
   .mark { position: absolute; left: 84px; top: 250px; font-size: 46px; }
@@ -26,6 +29,25 @@
   .foot { position: absolute; left: 84px; right: 84px; bottom: 150px; display: flex; justify-content: space-between; align-items: flex-end; font-size: 31px; font-weight: 500; line-height: 1.3; }
   .foot b { font-weight: 700; }
   .foot .w { font-family: "Unbounded"; font-weight: 800; font-size: 54px; letter-spacing: -0.03em; }
+
+  /* gussets */
+  .side { position: absolute; left: 50%; top: 50%; white-space: nowrap; transform: translate(-50%, -50%) rotate(-90deg); font-size: 64px; }
+  .side small { font-family: "Onest"; font-weight: 500; font-size: 30px; letter-spacing: 0; text-transform: none; margin-left: 40px; }
+
+  /* back */
+  .back .inner { position: absolute; left: 96px; right: 96px; top: 600px; bottom: 150px; display: flex; flex-direction: column; }
+  .back h2 { font-size: 84px; margin-bottom: 36px; }
+  .back p { font-size: 30px; line-height: 1.4; font-weight: 400; margin-bottom: 26px; }
+  .cols { display: grid; grid-template-columns: 1fr; gap: 40px; align-items: start; margin: 10px 0 34px; }
+  .facts { display: grid; grid-template-columns: 1fr 1fr; gap: 24px 40px; }
+  .facts div { font-size: 27px; line-height: 1.25; }
+  .facts b { display: block; font-family: "Unbounded"; font-weight: 800; font-size: 34px; letter-spacing: -0.03em; text-transform: uppercase; margin-top: 4px; }
+  .stamp { margin-top: auto; display: flex; gap: 28px; align-items: stretch; }
+  .stamp .box { flex: 1; background: var(--print); color: var(--bag); padding: 26px 30px; font-size: 26px; line-height: 1.3; }
+  .stamp .box b { display: block; font-family: "Unbounded"; font-weight: 800; font-size: 40px; letter-spacing: -0.03em; margin-top: 6px; }
+  .bars { width: 250px; display: flex; gap: 0; align-items: stretch; background: var(--print); padding: 18px 16px; }
+  .bars i { display: block; background: var(--bag); margin-right: 5px; }
+  .small { font-size: 23px; line-height: 1.35; margin-top: 30px; }
 
   /* mask pass: everything printed is white, the bare bag is black */
   body.mask { --bag: #000 !important; --print: #fff !important; }
@@ -42,6 +64,23 @@
       <div style="text-align:right"><div id="roast"></div><div class="w">250 g</div></div>
     </div>
   </section>
+  <section class="panel gr"><div class="side d" id="side1"></div></section>
+  <section class="panel back">
+    <div class="inner">
+      <h2 class="d" id="backname"></h2>
+      <p id="story"></p>
+      <div class="cols">
+        <div class="facts" id="facts"></div>
+      </div>
+      <p id="brew"></p>
+      <div class="stamp">
+        <div class="box">Roasted in small batches every Tuesday<b>Best within 6 weeks</b></div>
+        <div class="bars" id="bars"></div>
+      </div>
+      <div class="small">Wako Beans is a portfolio concept by Sean Rhani Dela Cruz. Whole bean coffee, 250 g net. Store cool and dry, and fold the top down after opening.</div>
+    </div>
+  </section>
+  <section class="panel gl"><div class="side d" id="side2"></div></section>
 <script>
   const q = new URLSearchParams(location.search);
   const c = JSON.parse(decodeURIComponent(q.get("c")));
@@ -54,6 +93,13 @@
   $("name").textContent = c.name;
   $("notes").innerHTML = "<b>Tastes of</b><br>" + c.notes.join("<br>");
   $("roast").textContent = c.place;
+  $("backname").textContent = c.name;
+  $("story").textContent = c.story;
+  $("facts").innerHTML = [["Species", c.species], ["Grown at", c.altitude.toLocaleString("en-US") + " m"], ["Process", c.process], ["Roast", c.roast]]
+    .map(([k, v]) => `<div>${k}<b>${v}</b></div>`).join("");
+  $("brew").textContent = "Ingredients: 100% roasted " + c.species.toLowerCase() + " coffee beans. To brew, use 15 g of coffee for every 250 g of water just off the boil.";
+  $("side1").innerHTML = c.name + "<small>" + c.species + " from " + c.place + "</small>";
+  $("side2").innerHTML = "Wako Beans<small>" + c.altitude.toLocaleString("en-US") + " m above sea level</small>";
 
   // the altitude column: a bar on a 0 to 2,000 m scale, so five bags in a row step down like a chart
   const meter = $("meter");
@@ -61,6 +107,12 @@
   meter.innerHTML = `<div class="fill" style="height:${frac * 100}%"></div>
     <div class="alt d" style="bottom:calc(${frac * 100}% + 58px)">${c.altitude.toLocaleString("en-US")}</div>
     <div class="unit" style="bottom:calc(${frac * 100}% + 16px)">metres above sea level</div>`;
+  // fake barcode
+  let seed = c.altitude;
+  const rnd = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
+  let bars = "";
+  for (let i = 0; i < 26; i++) bars += `<i style="width:${3 + Math.floor(rnd() * 3) * 3}px"></i>`;
+  $("bars").innerHTML = bars;
 
   // fit the vertical name to the label's height
   document.fonts.ready.then(() => {

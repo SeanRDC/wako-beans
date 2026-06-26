@@ -70,7 +70,7 @@ def setup(samples):
     world.use_nodes = True
     background = world.node_tree.nodes.get("Background")
     background.inputs["Color"].default_value = (0.85, 0.85, 0.85, 1.0)
-    background.inputs["Strength"].default_value = 0.30
+    background.inputs["Strength"].default_value = 0.20
 
     bpy.ops.mesh.primitive_plane_add(size=6.0, location=(0.0, 0.0, 0.0))
     floor = bpy.context.active_object
@@ -101,10 +101,10 @@ def light(name, location, target, power, size, size_y=None):
 def studio(target, scale=1.0):
     """A tall soft key from the front left, a low fill, and a rim from behind to lift the edges."""
     s = scale
-    light("Key", (-0.62 * s, -0.78 * s, 0.52 * s), target, 34.0 * s * s, 0.55 * s, 0.85 * s)
-    light("Fill", (0.80 * s, -0.55 * s, 0.20 * s), target, 7.0 * s * s, 0.9 * s)
-    light("Rim", (0.45 * s, 0.75 * s, 0.50 * s), target, 22.0 * s * s, 0.35 * s, 0.7 * s)
-    light("Top", (0.0, -0.05 * s, 0.85 * s), target, 9.0 * s * s, 0.6 * s)
+    light("Key", (-0.62 * s, -0.78 * s, 0.52 * s), target, 9.0 * s * s, 0.55 * s, 0.85 * s)
+    light("Fill", (0.80 * s, -0.55 * s, 0.20 * s), target, 1.6 * s * s, 0.9 * s)
+    light("Rim", (0.45 * s, 0.75 * s, 0.50 * s), target, 7.5 * s * s, 0.35 * s, 0.7 * s)
+    light("Top", (0.0, -0.05 * s, 0.85 * s), target, 2.4 * s * s, 0.6 * s)
 
 
 def camera(location, target, lens, vertical=True):

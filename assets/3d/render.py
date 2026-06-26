@@ -1,14 +1,16 @@
 """Renders for the Wako Beans site.
 
-    blender -b --factory-startup -P assets/3d/render.py -- --job test
+    blender -b --factory-startup -P assets/3d/render.py -- --job hero
+    blender -b --factory-startup -P assets/3d/render.py -- --job test --only atok
 
-Options: --samples 96   --scale 1.0 (of each job's own size)   --out <folder>
+Options: --only a,b   --samples 96   --scale 1.0 (of each job's own size)   --out <folder>
 
 Cycles on a transparent film with a shadow-catcher floor, so every picture
 keeps only the object and its contact shadow and can sit on any of the site's
 colour fields. Colours go through the Standard view transform so the print on
 the bags stays close to the site's own hex values.
 """
+import json
 import math
 import os
 import sys
@@ -20,7 +22,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import wako_bag  # noqa: E402
 
+ROOT = os.path.dirname(os.path.dirname(HERE))
 LABELS = os.path.join(HERE, "out", "labels")
+with open(os.path.join(ROOT, "src", "content", "coffees.json"), encoding="utf8") as fh:
+    COFFEES = json.load(fh)
+SEEDS = {"atok": 11, "apo": 23, "kulaman": 37, "amadeo": 41, "lipa": 59}
 
 
 def arg(name, default=None):
@@ -125,19 +131,37 @@ def render(scene, path, size, scale):
     print(f"RENDERED {path}", flush=True)
 
 
+def wanted():
+    only = arg("--only")
+    names = only.split(",") if only else [c["slug"] for c in COFFEES]
+    return [c for c in COFFEES if c["slug"] in names]
+
+
 def bag_camera():
     return camera((0.0, -1.02, 0.235), (0.0, 0.0, 0.123), 110.0)
 
 
+def job_hero(out, samples, scale):
+    """One portrait of each bag, turned a little so the gusset shows."""
+    for coffee in wanted():
+        scene = setup(samples)
+        carrier = wako_bag.build_bag(coffee["slug"], coffee["colors"], LABELS, SEEDS[coffee["slug"]])
+        carrier.rotation_euler.z = math.radians(-24)
+        studio((0.0, 0.0, 0.125))
+        bag_camera()
+        render(scene, os.path.join(out, "hero", f"{coffee['slug']}.png"), (1000, 1500), scale)
+
+
 def job_test(out, samples, scale):
     """Quick looks while shaping the bag: front three-quarter, side and back."""
+    coffee = wanted()[0]
     scene = setup(samples)
-    carrier = wako_bag.build_bag("test", {}, LABELS, 11)
+    carrier = wako_bag.build_bag(coffee["slug"], coffee["colors"], LABELS, SEEDS[coffee["slug"]])
     studio((0.0, 0.0, 0.125))
     bag_camera()
     for name, deg in (("front", -24),):
         carrier.rotation_euler.z = math.radians(deg)
-        render(scene, os.path.join(out, "test", f"bag-{name}.png"), (600, 900), scale)
+        render(scene, os.path.join(out, "test", f"{coffee['slug']}-{name}.png"), (600, 900), scale)
 
 
 if __name__ == "__main__":
@@ -145,4 +169,4 @@ if __name__ == "__main__":
     job = arg("--job", "test")
     n = int(arg("--samples", "96"))
     k = float(arg("--scale", "1.0"))
-    {"test": job_test}[job](out_dir, n, k)
+    {"hero": job_hero, "test": job_test}[job](out_dir, n, k)

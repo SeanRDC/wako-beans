@@ -1,6 +1,7 @@
 """Renders for the Wako Beans site.
 
     blender -b --factory-startup -P assets/3d/render.py -- --job hero
+    blender -b --factory-startup -P assets/3d/render.py -- --job spin --only atok
     blender -b --factory-startup -P assets/3d/render.py -- --job test --only atok
 
 Options: --only a,b   --samples 96   --scale 1.0 (of each job's own size)   --out <folder>
@@ -126,6 +127,9 @@ def render(scene, path, size, scale):
     scene.render.resolution_x = int(size[0] * scale)
     scene.render.resolution_y = int(size[1] * scale)
     scene.render.resolution_percentage = 100
+    if os.path.exists(path) and "--force" not in sys.argv:
+        print(f"KEPT {path}", flush=True)
+        return
     scene.render.filepath = path
     bpy.ops.render.render(write_still=True)
     print(f"RENDERED {path}", flush=True)
@@ -152,6 +156,20 @@ def job_hero(out, samples, scale):
         render(scene, os.path.join(out, "hero", f"{coffee['slug']}.png"), (1000, 1500), scale)
 
 
+def job_spin(out, samples, scale):
+    """A full turn of each bag in equal steps, for the product page's drag-to-turn."""
+    frames = int(arg("--frames", "24"))
+    start = int(arg("--from", "0"))
+    for coffee in wanted():
+        scene = setup(samples)
+        carrier = wako_bag.build_bag(coffee["slug"], coffee["colors"], LABELS, SEEDS[coffee["slug"]])
+        studio((0.0, 0.0, 0.125))
+        bag_camera()
+        for f in range(start, frames):
+            carrier.rotation_euler.z = math.radians(-24) - 2 * math.pi * f / frames  # frame 0 is the portrait's pose
+            render(scene, os.path.join(out, "spin", coffee["slug"], f"{f:02d}.png"), (480, 720), scale)
+
+
 def job_test(out, samples, scale):
     """Quick looks while shaping the bag: front three-quarter, side and back."""
     coffee = wanted()[0]
@@ -169,4 +187,4 @@ if __name__ == "__main__":
     job = arg("--job", "test")
     n = int(arg("--samples", "96"))
     k = float(arg("--scale", "1.0"))
-    {"hero": job_hero, "test": job_test}[job](out_dir, n, k)
+    {"hero": job_hero, "spin": job_spin, "test": job_test}[job](out_dir, n, k)

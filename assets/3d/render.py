@@ -3,6 +3,7 @@
     blender -b --factory-startup -P assets/3d/render.py -- --job hero
     blender -b --factory-startup -P assets/3d/render.py -- --job spin --only atok
     blender -b --factory-startup -P assets/3d/render.py -- --job row
+    blender -b --factory-startup -P assets/3d/render.py -- --job phone
     blender -b --factory-startup -P assets/3d/render.py -- --job test --only atok
 
 Options: --only a,b   --samples 96   --scale 1.0 (of each job's own size)   --out <folder>
@@ -157,6 +158,17 @@ def job_hero(out, samples, scale):
         render(scene, os.path.join(out, "hero", f"{coffee['slug']}.png"), (1000, 1500), scale)
 
 
+def job_phone(out, samples, scale):
+    """Each bag almost straight on, for narrow screens where the title sits across its top."""
+    for coffee in wanted():
+        scene = setup(samples)
+        carrier = wako_bag.build_bag(coffee["slug"], coffee["colors"], LABELS, SEEDS[coffee["slug"]])
+        carrier.rotation_euler.z = math.radians(-9)
+        studio((0.0, 0.0, 0.125))
+        bag_camera()
+        render(scene, os.path.join(out, "phone", f"{coffee['slug']}.png"), (800, 1200), scale)
+
+
 def job_spin(out, samples, scale):
     """A full turn of each bag in equal steps, for the product page's drag-to-turn."""
     frames = int(arg("--frames", "24"))
@@ -201,4 +213,4 @@ if __name__ == "__main__":
     job = arg("--job", "test")
     n = int(arg("--samples", "96"))
     k = float(arg("--scale", "1.0"))
-    {"hero": job_hero, "spin": job_spin, "row": job_row, "test": job_test}[job](out_dir, n, k)
+    {"hero": job_hero, "phone": job_phone, "spin": job_spin, "row": job_row, "test": job_test}[job](out_dir, n, k)

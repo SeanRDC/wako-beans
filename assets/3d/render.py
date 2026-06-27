@@ -2,6 +2,7 @@
 
     blender -b --factory-startup -P assets/3d/render.py -- --job hero
     blender -b --factory-startup -P assets/3d/render.py -- --job spin --only atok
+    blender -b --factory-startup -P assets/3d/render.py -- --job row
     blender -b --factory-startup -P assets/3d/render.py -- --job test --only atok
 
 Options: --only a,b   --samples 96   --scale 1.0 (of each job's own size)   --out <folder>
@@ -170,6 +171,19 @@ def job_spin(out, samples, scale):
             render(scene, os.path.join(out, "spin", coffee["slug"], f"{f:02d}.png"), (480, 720), scale)
 
 
+def job_row(out, samples, scale):
+    """All five in a line, highest farm first, so the altitude columns step down."""
+    scene = setup(samples)
+    gap = 0.172
+    for i, coffee in enumerate(COFFEES):
+        carrier = wako_bag.build_bag(coffee["slug"], coffee["colors"], LABELS, SEEDS[coffee["slug"]])
+        carrier.location.x = (i - 2) * gap
+        carrier.rotation_euler.z = math.radians((-7, 5, -3, 6, -5)[i])
+    studio((0.0, 0.0, 0.125), scale=1.9)
+    camera((0.0, -2.35, 0.30), (0.0, 0.0, 0.118), 110.0, vertical=False)
+    render(scene, os.path.join(out, "row.png"), (2000, 900), scale)
+
+
 def job_test(out, samples, scale):
     """Quick looks while shaping the bag: front three-quarter, side and back."""
     coffee = wanted()[0]
@@ -187,4 +201,4 @@ if __name__ == "__main__":
     job = arg("--job", "test")
     n = int(arg("--samples", "96"))
     k = float(arg("--scale", "1.0"))
-    {"hero": job_hero, "spin": job_spin, "test": job_test}[job](out_dir, n, k)
+    {"hero": job_hero, "spin": job_spin, "row": job_row, "test": job_test}[job](out_dir, n, k)

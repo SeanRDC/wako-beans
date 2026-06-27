@@ -1,4 +1,7 @@
-"""Coffee beans for the Wako Beans site: one model for each of the four species.
+"""Coffee beans for the Wako Beans site: the four species, and a bed of roasted beans.
+
+    blender -b --factory-startup -P assets/3d/beans.py -- --job species
+    blender -b --factory-startup -P assets/3d/beans.py -- --job bed
 
 Each species has its own bean. Arabica is an oval with an S-shaped crease,
 robusta is rounder with a straight one, liberica is the largest and lopsided,
@@ -10,9 +13,11 @@ import sys
 
 import bpy
 import numpy as np
+from mathutils import Euler, Vector
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
+import render as studio  # noqa: E402
 from wako_bag import hex_linear  # noqa: E402
 
 MM = 0.001
@@ -151,3 +156,109 @@ def bean_material(kind, colour=None):
     links.new(bump.outputs["Normal"], bump2.inputs["Normal"])
     links.new(bump2.outputs["Normal"], bsdf.inputs["Normal"])
     return mat
+
+
+def place(mesh, material, location, rotation):
+    obj = bpy.data.objects.new(mesh.name, mesh)
+    bpy.context.collection.objects.link(obj)
+    obj.location = location
+    obj.rotation_euler = Euler(rotation)
+    if not mesh.materials:
+        mesh.materials.append(material)
+    return obj
+
+
+def scatter(kind, rng, count, spread, material, variants=4, gap=1.12):
+    """Beans lying on the floor, none overlapping: most crease-down, a few showing it."""
+    length, width, thick = SPECIES[kind][:3]
+    meshes = [bean_mesh(f"{kind} {i}", kind, seed=i + 1) for i in range(variants)]
+    placed = []
+    tries = 0
+    while len(placed) < count and tries < 4000:
+        tries += 1
+        p = rng.uniform(-1, 1, 2) * spread
+        if any(np.hypot(*(p - q)) < length * MM * gap * 0.82 for q in placed):
+            continue
+        placed.append(p)
+        up = rng.random() < 0.45
+        tilt = rng.uniform(-0.12, 0.12)
+        rot = (tilt, math.pi if up else 0.0, rng.uniform(0, 2 * math.pi))
+        z = (thick * 0.38 / 2 if not up else thick / 2) * MM
+        place(meshes[len(placed) % variants], material, (p[0], p[1], z), rot)
+    return placed
+
+
+def job_species(out, samples, scale):
+    """Each species alone: a loose handful seen from above and a little to the front."""
+    only = studio.arg("--only")
+    for kind in SPECIES:
+        if only and kind not in only.split(","):
+            continue
+        scene = studio.setup(samples)
+        rng = np.random.default_rng(hash(kind) % 1000 + 7)
+        rng = np.random.default_rng({"arabica": 3, "robusta": 5, "excelsa": 8, "liberica": 13}[kind])
+        scatter(kind, rng, 15, (0.024, 0.031), bean_material(kind))
+        target = (0.0, 0.0, 0.002)
+        studio.light("Key", (-0.20, -0.16, 0.30), target, 1.5, 0.22)
+        studio.light("Fill", (0.25, -0.10, 0.12), target, 0.22, 0.30)
+        studio.light("Rim", (0.10, 0.26, 0.16), target, 1.0, 0.14)
+        cam = studio.camera((0.0, -0.115, 0.245), target, 110.0)
+        cam.data.dof.use_dof = True
+        cam.data.dof.focus_distance = (Vector(cam.location) - Vector(target)).length
+        cam.data.dof.aperture_fstop = 11.0
+        studio.render(scene, os.path.join(out, "species", f"{kind}.png"), (960, 1200), scale)
+
+
+def job_bed(out, samples, scale):
+    """A bed of all four species mixed, close, for full-bleed backgrounds."""
+    scene = studio.setup(samples)
+    scene.render.film_transparent = False
+    world = scene.world.node_tree.nodes.get("Background")
+    world.inputs["Color"].default_value = (0.02, 0.012, 0.008, 1.0)
+    for obj in list(bpy.data.objects):
+        if obj.name == "Shadow catcher":
+            bpy.data.objects.remove(obj, do_unlink=True)
+    bpy.ops.mesh.primitive_plane_add(size=2.0, location=(0.0, 0.0, 0.0))
+    floor = bpy.context.active_object
+    mat = bpy.data.materials.new("Tray")
+    mat.use_nodes = True
+    mat.node_tree.nodes.get("Principled BSDF").inputs["Base Color"].default_value = (0.012, 0.008, 0.006, 1.0)
+    floor.data.materials.append(mat)
+
+    rng = np.random.default_rng(21)
+    kinds = list(SPECIES)
+    meshes = {k: [bean_mesh(f"{k} bed {i}", k, seed=10 + i) for i in range(3)] for k in kinds}
+    mats = {k: bean_material(k) for k in kinds}
+    half_x, half_y = 0.105, 0.062
+    # three layers on a staggered grid, each a little looser and more tumbled than the one below
+    for layer, (pitch, lift, lean) in enumerate(((0.0084, 0.0022, 0.3), (0.0096, 0.0060, 0.7), (0.0112, 0.0096, 1.0))):
+        ny = int(2 * half_y / (pitch * 0.86)) + 2
+        nx = int(2 * half_x / pitch) + 2
+        for iy in range(ny):
+            for ix in range(nx):
+                if layer == 2 and rng.random() < 0.25:
+                    continue
+                x = -half_x + (ix + 0.5 * (iy % 2)) * pitch + rng.uniform(-1, 1) * pitch * 0.22
+                y = -half_y + iy * pitch * 0.86 + rng.uniform(-1, 1) * pitch * 0.22
+                kind = kinds[int(rng.integers(0, 4))]
+                up = rng.random() < 0.5
+                rot = (rng.uniform(-1, 1) * lean * 0.5, (math.pi if up else 0.0) + rng.uniform(-1, 1) * lean * 0.6, rng.uniform(0, 2 * math.pi))
+                place(meshes[kind][int(rng.integers(0, 3))], mats[kind], (x, y, lift + rng.uniform(0, 0.0012)), rot)
+
+    target = (0.0, 0.0, 0.006)
+    studio.light("Key", (-0.22, -0.10, 0.30), target, 3.4, 0.20)
+    studio.light("Rim", (0.24, 0.20, 0.12), target, 1.6, 0.10)
+    studio.light("Fill", (0.10, -0.30, 0.20), target, 0.4, 0.4)
+    cam = studio.camera((0.0, -0.085, 0.36), target, 80.0, vertical=False)
+    cam.data.dof.use_dof = True
+    cam.data.dof.focus_distance = (Vector(cam.location) - Vector(target)).length
+    cam.data.dof.aperture_fstop = 5.6
+    studio.render(scene, os.path.join(out, "bed.png"), (1920, 1080), scale)
+
+
+if __name__ == "__main__":
+    out_dir = os.path.abspath(studio.arg("--out", os.path.join(HERE, "out", "renders")))
+    job = studio.arg("--job", "species")
+    n = int(studio.arg("--samples", "64"))
+    k = float(studio.arg("--scale", "1.0"))
+    {"species": job_species, "bed": job_bed}[job](out_dir, n, k)
